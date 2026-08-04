@@ -6,6 +6,8 @@
 <title>Free? — Room Status</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --bg:#EDF1EF;
@@ -449,30 +451,70 @@
 (function(){
   "use strict";
 
-  /* ---------------- storage helpers ---------------- */
-  async function sGet(key, shared){
+  /* ================================================================
+     FIREBASE SETUP — REQUIRED
+     1. Go to https://console.firebase.google.com -> Add project (free).
+     2. In the project, go to Build -> Firestore Database -> Create database
+        -> Start in TEST MODE (fine for a small household app).
+     3. Go to Project settings (gear icon) -> General -> "Your apps" ->
+        click the </> (web) icon -> register app -> copy the firebaseConfig
+        object it gives you -> paste its values below.
+     4. Re-upload this file to GitHub Pages. Done — every device that opens
+        the page now shares the same live room data.
+
+     Optional but recommended once it's working: in Firestore -> Rules, you
+     can restrict access, e.g. allow read/write only on the "rooms"
+     collection, since anyone with the URL + a room code can currently
+     read/write that room's data (fine for a household, not for anything
+     sensitive).
+     ================================================================ */
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  let db = null;
+  let roomsCol = null;
+  let firebaseReady = false;
+  try{
+    if(firebaseConfig.apiKey === "YOUR_API_KEY"){
+      throw new Error("Firebase config not filled in yet.");
+    }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    roomsCol = db.collection('rooms');
+    firebaseReady = true;
+  }catch(e){
+    console.error(e);
+  }
+
+  function showSetupBlocker(){
+    document.body.innerHTML =
+      '<div style="max-width:440px;margin:40px auto;padding:24px;font-family:Inter,system-ui,sans-serif;line-height:1.6;">' +
+      '<h2 style="font-family:Space Grotesk,sans-serif;">Almost there</h2>' +
+      '<p>This app needs a free Firebase project to sync room data between roommates&rsquo; devices. Open <code>index.html</code>, find the <code>firebaseConfig</code> object near the top of the script, and paste in your project&rsquo;s keys from the Firebase console (Project settings &rarr; General &rarr; Your apps).</p>' +
+      '<p style="color:#5B6A67;font-size:13px;">Firebase Console: <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></p>' +
+      '</div>';
+  }
+
+  /* ---------------- local (per-device) persistence ---------------- */
+  function localGet(key, fallback){
     try{
-      const r = await window.storage.get(key, !!shared);
-      return r ? r.value : null;
-    }catch(e){ return null; }
+      const v = localStorage.getItem(key);
+      return (v === null || v === undefined) ? fallback : JSON.parse(v);
+    }catch(e){ return fallback; }
   }
-  async function sSet(key, value, shared){
-    try{
-      return await window.storage.set(key, value, !!shared);
-    }catch(e){ console.error('storage set failed', key, e); return null; }
-  }
-  async function sGetJSON(key, shared, fallback){
-    const v = await sGet(key, shared);
-    if(v === null || v === undefined) return fallback;
-    try{ return JSON.parse(v); }catch(e){ return fallback; }
-  }
-  async function sSetJSON(key, obj, shared){
-    return await sSet(key, JSON.stringify(obj), shared);
+  function localSet(key, value){
+    try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){}
   }
 
   const ROOM_KINDS = [
     { id:'bathroom', label:'Bathroom', sub:'Shower / bath',
-      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M6 12V6a2 2 0 0 1 2-3l1 1"/><path d="M6 12v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7"/><path d="M9 21v1"/><path d="M15 21v1"/><circle cx="12" cy="4" r="0"/></svg>' },
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M6 12V6a2 2 0 0 1 2-3l1 1"/><path d="M6 12v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7"/><path d="M9 21v1"/><path d="M15 21v1"/></svg>' },
     { id:'toilet', label:'Toilet', sub:'WC',
       icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10"/><path d="M8 4v4"/><path d="M16 4v4"/><path d="M6 12h12l-1.2 7a2 2 0 0 1-2 1.7h-5.6a2 2 0 0 1-2-1.7L6 12Z"/><path d="M6 12a3 3 0 0 1 3-4h6a3 3 0 0 1 3 4"/></svg>' }
   ];
@@ -514,19 +556,14 @@
   }
 
   /* ---------------- app state ---------------- */
-  let ME = null;            // {roomCode, name}
-  let roomState = null;     // {bathroom:{occupant,startTime,queue:[]}, toilet:{...}}
-  let prevRoomState = null; // for diffing to fire toasts
-  let history = [];         // array of session records
-  let members = [];         // array of names
-  let pollTimer = null;
+  let ME = null;
+  let roomState = null;
+  let prevRoomState = null;
+  let history = [];
+  let members = [];
+  let unsubscribeRoom = null;
   let tickTimer = null;
   let notifPermissionAsked = false;
-
-  function stateKey(code){ return "room:"+code+":state"; }
-  function historyKey(code){ return "room:"+code+":history"; }
-  function membersKey(code){ return "room:"+code+":members"; }
-  function infoKey(code){ return "room:"+code+":info"; }
 
   function defaultState(){
     return {
@@ -589,23 +626,32 @@
   document.getElementById('btn-create-room').onclick = async ()=>{
     const btn = document.getElementById('btn-create-room');
     btn.disabled = true; btn.textContent = 'Creating…';
-    let code, tries = 0;
-    do{
-      code = genCode(5);
-      tries++;
-      const exists = await sGet(infoKey(code), true);
-      if(!exists) break;
-    }while(tries < 8);
+    try{
+      let code, tries = 0, ref, snap;
+      do{
+        code = genCode(5);
+        ref = roomsCol.doc(code);
+        snap = await ref.get();
+        tries++;
+      }while(snap.exists && tries < 8);
 
-    await sSetJSON(infoKey(code), { code, createdAt: Date.now() }, true);
-    await sSetJSON(stateKey(code), defaultState(), true);
-    await sSetJSON(historyKey(code), [], true);
-    await sSetJSON(membersKey(code), [], true);
+      await ref.set({
+        code,
+        createdAt: Date.now(),
+        members: [],
+        state: defaultState(),
+        history: []
+      });
 
-    pendingRoomCode = code;
-    pendingIsNewRoom = true;
-    btn.disabled = false; btn.textContent = 'Create a room';
-    goToNameScreen();
+      pendingRoomCode = code;
+      pendingIsNewRoom = true;
+      goToNameScreen();
+    }catch(e){
+      console.error(e);
+      showToast('Could not create a room — check your internet connection and Firebase setup.', {color:'var(--occupied)'});
+    }finally{
+      btn.disabled = false; btn.textContent = 'Create a room';
+    }
   };
 
   document.getElementById('btn-join-submit').onclick = async ()=>{
@@ -616,12 +662,18 @@
     if(!code){ errEl.textContent = 'Enter a room code.'; return; }
     const btn = document.getElementById('btn-join-submit');
     btn.disabled = true; btn.textContent = 'Checking…';
-    const info = await sGet(infoKey(code), true);
-    btn.disabled = false; btn.textContent = 'Join room';
-    if(!info){ errEl.textContent = "Can't find a room with that code."; return; }
-    pendingRoomCode = code;
-    pendingIsNewRoom = false;
-    goToNameScreen();
+    try{
+      const snap = await roomsCol.doc(code).get();
+      if(!snap.exists){ errEl.textContent = "Can't find a room with that code."; return; }
+      pendingRoomCode = code;
+      pendingIsNewRoom = false;
+      goToNameScreen();
+    }catch(e){
+      console.error(e);
+      errEl.textContent = 'Connection problem — try again.';
+    }finally{
+      btn.disabled = false; btn.textContent = 'Join room';
+    }
   };
   document.getElementById('join-code-input').addEventListener('keydown', e=>{
     if(e.key === 'Enter') document.getElementById('btn-join-submit').click();
@@ -648,14 +700,17 @@
     errEl.textContent = '';
 
     const code = pendingRoomCode;
-    let mem = await sGetJSON(membersKey(code), true, []);
-    if(!mem.includes(name)) mem.push(name);
-    await sSetJSON(membersKey(code), mem, true);
-
-    ME = { roomCode: code, name };
-    await sSetJSON('me', ME, false);
-
-    enterMainApp();
+    try{
+      await roomsCol.doc(code).update({
+        members: firebase.firestore.FieldValue.arrayUnion(name)
+      });
+      ME = { roomCode: code, name };
+      localSet('me', ME);
+      enterMainApp();
+    }catch(e){
+      console.error(e);
+      errEl.textContent = 'Connection problem — try again.';
+    }
   }
 
   /* ---------------- main app boot ---------------- */
@@ -664,8 +719,9 @@
     document.getElementById('main-room-code').textContent = ME.roomCode;
     show('screen-main');
     maybeAskNotifPermission();
-    await refreshAll(true);
-    startPolling();
+    subscribeRoom();
+    if(tickTimer) clearInterval(tickTimer);
+    tickTimer = setInterval(tickTimers, 1000);
   }
 
   document.getElementById('btn-copy-code').onclick = async ()=>{
@@ -679,8 +735,9 @@
 
   document.getElementById('btn-leave-room').onclick = async ()=>{
     if(!confirm('Leave this room? You can rejoin anytime with the code.')) return;
-    stopPolling();
-    await sSetJSON('me', null, false);
+    if(unsubscribeRoom){ unsubscribeRoom(); unsubscribeRoom = null; }
+    if(tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+    localSet('me', null);
     ME = null; roomState = null; prevRoomState = null; history = []; members = [];
     document.getElementById('name-input').value = '';
     document.getElementById('join-code-input').value = '';
@@ -700,42 +757,33 @@
     };
   });
 
-  /* ---------------- polling ---------------- */
-  function startPolling(){
-    stopPolling();
-    pollTimer = setInterval(()=>refreshAll(false), 3500);
-    tickTimer = setInterval(tickTimers, 1000);
-  }
-  function stopPolling(){
-    if(pollTimer) clearInterval(pollTimer);
-    if(tickTimer) clearInterval(tickTimer);
-    pollTimer = null; tickTimer = null;
-  }
+  /* ---------------- realtime subscription ---------------- */
+  function subscribeRoom(){
+    if(unsubscribeRoom) unsubscribeRoom();
+    unsubscribeRoom = roomsCol.doc(ME.roomCode).onSnapshot(snap=>{
+      if(!snap.exists) return;
+      const data = snap.data();
+      const newState = data.state || defaultState();
 
-  async function refreshAll(isInitial){
-    if(!ME) return;
-    const code = ME.roomCode;
-    const [newState, newHistory, newMembers] = await Promise.all([
-      sGetJSON(stateKey(code), true, defaultState()),
-      sGetJSON(historyKey(code), true, []),
-      sGetJSON(membersKey(code), true, [])
-    ]);
+      if(prevRoomState){
+        diffAndNotify(prevRoomState, newState);
+      }
+      prevRoomState = newState;
+      roomState = newState;
+      history = data.history || [];
+      members = data.members || [];
 
-    if(!isInitial && roomState){
-      diffAndNotify(roomState, newState);
-    }
-
-    prevRoomState = roomState;
-    roomState = newState;
-    history = newHistory;
-    members = newMembers;
-
-    renderMembers();
-    renderRooms();
-    const activeTab = document.querySelector('.nav-btn.active') ? document.querySelector('.nav-btn.active').dataset.tab : 'home';
-    if(activeTab === 'history') renderHistory();
-    if(activeTab === 'leaderboard') renderLeaderboard();
-    renderTodayPreview();
+      renderMembers();
+      renderRooms();
+      const activeBtn = document.querySelector('.nav-btn.active');
+      const activeTab = activeBtn ? activeBtn.dataset.tab : 'home';
+      if(activeTab === 'history') renderHistory();
+      if(activeTab === 'leaderboard') renderLeaderboard();
+      renderTodayPreview();
+    }, err=>{
+      console.error(err);
+      showToast('Lost connection to the room — check your internet.', {color:'var(--occupied)'});
+    });
   }
 
   function diffAndNotify(oldSt, newSt){
@@ -743,7 +791,6 @@
       const oldR = oldSt[rk.id] || {occupant:null,queue:[]};
       const newR = newSt[rk.id] || {occupant:null,queue:[]};
 
-      // someone finished -> became free
       if(oldR.occupant && !newR.occupant){
         const durMin = oldR.startTime ? (Date.now() - oldR.startTime)/60000 : 0;
         let msg = '<b>'+escapeHtml(oldR.occupant)+'</b> finished the '+rk.label.toLowerCase()+' ('+fmtDuration(durMin)+') — it&rsquo;s free now.';
@@ -753,7 +800,6 @@
         }
         showToast(msg, { color:'var(--free)' });
       }
-      // someone started -> became occupied
       else if(!oldR.occupant && newR.occupant){
         if(newR.occupant !== (ME && ME.name)){
           showToast('<b>'+escapeHtml(newR.occupant)+'</b> just started using the '+rk.label.toLowerCase()+'.', { color:'var(--occupied)' });
@@ -784,7 +830,6 @@
   function renderRooms(){
     const grid = document.getElementById('rooms-grid');
     grid.innerHTML = ROOM_KINDS.map(rk => roomCardHTML(rk)).join('');
-    // wire buttons after render
     ROOM_KINDS.forEach(rk=>{
       const startBtn = document.getElementById('btn-start-'+rk.id);
       const finishBtn = document.getElementById('btn-finish-'+rk.id);
@@ -845,73 +890,88 @@
   }
 
   async function startSession(roomId){
-    const code = ME.roomCode;
-    // re-fetch freshest state to avoid clobbering a concurrent start
-    const fresh = await sGetJSON(stateKey(code), true, defaultState());
-    if(fresh[roomId].occupant){
-      showToast('Someone just beat you to it.', {color:'var(--occupied)'});
-      roomState = fresh; renderRooms();
-      return;
+    const ref = roomsCol.doc(ME.roomCode);
+    try{
+      await db.runTransaction(async tx=>{
+        const snap = await tx.get(ref);
+        const data = snap.data();
+        const state = data.state || defaultState();
+        if(state[roomId].occupant){
+          throw new Error('taken');
+        }
+        state[roomId].occupant = ME.name;
+        state[roomId].startTime = Date.now();
+        state[roomId].queue = (state[roomId].queue||[]).filter(n => n !== ME.name);
+        tx.update(ref, { state });
+      });
+    }catch(e){
+      if(e.message === 'taken'){
+        showToast('Someone just beat you to it.', {color:'var(--occupied)'});
+      }else{
+        console.error(e);
+        showToast('Could not start — check your connection.', {color:'var(--occupied)'});
+      }
     }
-    fresh[roomId].occupant = ME.name;
-    fresh[roomId].startTime = Date.now();
-    // remove self from that room's queue if present
-    fresh[roomId].queue = (fresh[roomId].queue||[]).filter(n => n !== ME.name);
-    await sSetJSON(stateKey(code), fresh, true);
-    roomState = fresh;
-    renderRooms();
   }
 
   async function finishSession(roomId){
-    const code = ME.roomCode;
-    const fresh = await sGetJSON(stateKey(code), true, defaultState());
-    const r = fresh[roomId];
-    if(!r.occupant || r.occupant !== ME.name){
-      roomState = fresh; renderRooms();
-      return;
+    const ref = roomsCol.doc(ME.roomCode);
+    let durMin = 0;
+    try{
+      await db.runTransaction(async tx=>{
+        const snap = await tx.get(ref);
+        const data = snap.data();
+        const state = data.state || defaultState();
+        const r = state[roomId];
+        if(!r.occupant || r.occupant !== ME.name) throw new Error('not-yours');
+
+        durMin = (Date.now() - r.startTime) / 60000;
+        const h = data.history || [];
+        h.unshift({
+          id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
+          room: roomId,
+          name: ME.name,
+          start: r.startTime,
+          end: Date.now(),
+          durationMin: durMin,
+          date: todayStr()
+        });
+        const trimmed = h.slice(0, 300);
+
+        r.occupant = null;
+        r.startTime = null;
+        tx.update(ref, { state, history: trimmed });
+      });
+      showToast('Nice — you used the '+roomLabel(roomId).toLowerCase()+' for '+fmtDuration(durMin)+'.', {color:'var(--free)'});
+    }catch(e){
+      if(e.message !== 'not-yours'){
+        console.error(e);
+        showToast('Could not finish — check your connection.', {color:'var(--occupied)'});
+      }
     }
-    const durMin = (Date.now() - r.startTime) / 60000;
-
-    // append to history
-    const h = await sGetJSON(historyKey(code), true, []);
-    h.unshift({
-      id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
-      room: roomId,
-      name: ME.name,
-      start: r.startTime,
-      end: Date.now(),
-      durationMin: durMin,
-      date: todayStr()
-    });
-    const trimmed = h.slice(0, 300);
-    await sSetJSON(historyKey(code), trimmed, true);
-    history = trimmed;
-
-    fresh[roomId].occupant = null;
-    fresh[roomId].startTime = null;
-    await sSetJSON(stateKey(code), fresh, true);
-    roomState = fresh;
-
-    showToast('Nice — you used the '+roomLabel(roomId).toLowerCase()+' for '+fmtDuration(durMin)+'.', {color:'var(--free)'});
-    renderRooms();
-    renderTodayPreview();
   }
 
   async function toggleQueue(roomId){
-    const code = ME.roomCode;
-    const fresh = await sGetJSON(stateKey(code), true, defaultState());
-    const q = fresh[roomId].queue || [];
-    const idx = q.indexOf(ME.name);
-    if(idx === -1){
-      q.push(ME.name);
-      showToast("We'll notify you when the "+roomLabel(roomId).toLowerCase()+' is free.', {color:'var(--wait)'});
-    }else{
-      q.splice(idx,1);
+    const ref = roomsCol.doc(ME.roomCode);
+    try{
+      await db.runTransaction(async tx=>{
+        const snap = await tx.get(ref);
+        const data = snap.data();
+        const state = data.state || defaultState();
+        const q = state[roomId].queue || [];
+        const idx = q.indexOf(ME.name);
+        if(idx === -1){
+          q.push(ME.name);
+        }else{
+          q.splice(idx,1);
+        }
+        state[roomId].queue = q;
+        tx.update(ref, { state });
+      });
+    }catch(e){
+      console.error(e);
+      showToast('Could not update — check your connection.', {color:'var(--occupied)'});
     }
-    fresh[roomId].queue = q;
-    await sSetJSON(stateKey(code), fresh, true);
-    roomState = fresh;
-    renderRooms();
   }
 
   function roomLabel(id){
@@ -938,7 +998,6 @@
       el.innerHTML = emptyStateHTML('No sessions logged yet.');
       return;
     }
-    // group by date
     const groups = {};
     history.forEach(h=>{
       groups[h.date] = groups[h.date] || [];
@@ -975,13 +1034,13 @@
       el.innerHTML = emptyStateHTML('No data yet — finish a session to get on the board.');
       return;
     }
-    const totals = {}; // name -> {mins, sessions}
+    const totals = {};
     history.forEach(h=>{
       totals[h.name] = totals[h.name] || {mins:0, sessions:0};
       totals[h.name].mins += h.durationMin;
       totals[h.name].sessions += 1;
     });
-    const rows = Object.keys(totals).map(name=>({name, ...totals[name]}));
+    const rows = Object.keys(totals).map(name=>({name, mins: totals[name].mins, sessions: totals[name].sessions}));
     rows.sort((a,b)=> b.mins - a.mins);
     const maxMins = rows[0] ? rows[0].mins : 1;
     const medals = ['🥇','🥈','🥉'];
@@ -1012,16 +1071,24 @@
 
   /* ---------------- boot ---------------- */
   async function boot(){
-    const saved = await sGetJSON('me', false, null);
+    if(!firebaseReady){
+      showSetupBlocker();
+      return;
+    }
+    const saved = localGet('me', null);
     if(saved && saved.roomCode && saved.name){
-      const info = await sGet(infoKey(saved.roomCode), true);
-      if(info){
-        ME = saved;
-        // ensure still listed as a member
-        let mem = await sGetJSON(membersKey(ME.roomCode), true, []);
-        if(!mem.includes(ME.name)){ mem.push(ME.name); await sSetJSON(membersKey(ME.roomCode), mem, true); }
-        await enterMainApp();
-        return;
+      try{
+        const snap = await roomsCol.doc(saved.roomCode).get();
+        if(snap.exists){
+          ME = saved;
+          await roomsCol.doc(ME.roomCode).update({
+            members: firebase.firestore.FieldValue.arrayUnion(ME.name)
+          });
+          await enterMainApp();
+          return;
+        }
+      }catch(e){
+        console.error(e);
       }
     }
     show('screen-landing');
@@ -1030,6 +1097,7 @@
   boot();
 
 })();
+
 </script>
 </body>
 </html>
