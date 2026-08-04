@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<title>Free? — Room Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EDF1EF;
+    --surface:#FFFFFF;
+    --surface-2:#F5F7F6;
+    --ink:#1C2624;
+    --ink-soft:#5B6A67;
+    --line:#D6DEDB;
+    --free:#2F7A5C;
+    --free-bg:#E4F1EA;
+    --occupied:#C1443A;
+    --occupied-bg:#FBE7E4;
+    --wait:#B9832A;
+    --wait-bg:#FBF0DC;
+    --shadow: 0 1px 2px rgba(28,38,36,0.06), 0 6px 16px rgba(28,38,36,0.06);
+    --radius: 18px;
+    font-family:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    justify-content:center;
+  }
+  #app{
+    width:100%;
+    max-width:480px;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+    background:var(--bg);
+  }
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif; margin:0;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  button{font-family:inherit; cursor:pointer;}
+  input{font-family:inherit;}
+  ::selection{background:var(--free-bg);}
+
+  /* ---------- LANDING ---------- */
+  .center-screen{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding:32px 24px;
+    gap:28px;
+  }
+  .brand{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    text-align:center;
+  }
+  .brand .signature-icon{width:64px;height:64px;}
+  .brand h1{font-size:30px; letter-spacing:-0.02em;}
+  .brand p{margin:0; color:var(--ink-soft); font-size:15px; line-height:1.5;}
+
+  .card{
+    background:var(--surface);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:22px;
+  }
+  .stack{display:flex; flex-direction:column; gap:14px;}
+  .btn{
+    border:none;
+    border-radius:14px;
+    padding:15px 18px;
+    font-size:15px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--ink); color:#fff;}
+  .btn-primary:hover{filter:brightness(1.15);}
+  .btn-outline{background:transparent; color:var(--ink); border:1.5px solid var(--line);}
+  .btn-outline:hover{background:var(--surface-2);}
+  .btn-block{width:100%;}
+  .btn-sm{padding:9px 14px; font-size:13px; border-radius:10px;}
+  .divider-word{
+    display:flex; align-items:center; gap:10px;
+    color:var(--ink-soft); font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+  }
+  .divider-word::before,.divider-word::after{content:""; flex:1; height:1px; background:var(--line);}
+
+  .field label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em;}
+  .field input{
+    width:100%;
+    padding:14px 16px;
+    border-radius:12px;
+    border:1.5px solid var(--line);
+    font-size:17px;
+    background:var(--surface-2);
+    color:var(--ink);
+    outline:none;
+  }
+  .field input:focus{border-color:var(--ink);}
+  #join-code-input{text-transform:uppercase; letter-spacing:.12em; font-family:'JetBrains Mono',monospace;}
+  .error-text{color:var(--occupied); font-size:13px; font-weight:500; min-height:16px;}
+  .hidden{display:none !important;}
+
+  /* ---------- MAIN APP HEADER ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 20px 10px;
+  }
+  .topbar .who{display:flex; flex-direction:column;}
+  .topbar .who .greet{font-size:12px; color:var(--ink-soft); font-weight:500;}
+  .topbar .who .name{font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:600;}
+  .code-chip{
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface);
+    border:1.5px solid var(--line);
+    border-radius:999px;
+    padding:7px 12px 7px 14px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:.06em;
+    box-shadow:var(--shadow);
+  }
+  .code-chip button{background:none;border:none;padding:2px;display:flex;color:var(--ink-soft);}
+  .code-chip button:active{color:var(--ink);}
+
+  main{flex:1; overflow-y:auto; padding:6px 20px 100px;}
+  .tab-panel{display:none; flex-direction:column; gap:16px;}
+  .tab-panel.active{display:flex;}
+
+  /* ---------- SIGN CARDS (signature element) ---------- */
+  .rooms-grid{display:flex; flex-direction:column; gap:16px; margin-top:6px;}
+  @media(min-width:460px){ .rooms-grid{flex-direction:row;} }
+
+  .sign-card{
+    position:relative;
+    flex:1;
+    background:var(--surface);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    border:1.5px solid var(--line);
+  }
+  .sign-plate{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:16px 18px 10px;
+  }
+  .sign-plate .icon{
+    width:34px; height:34px; flex-shrink:0;
+    color:var(--ink);
+  }
+  .sign-plate .room-name{font-size:18px; font-weight:600;}
+  .sign-plate .room-sub{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+
+  .flip-sign{
+    margin:0 18px 16px;
+    border-radius:12px;
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.04), 0 1px 0 rgba(255,255,255,0.5);
+    transition: background .25s ease;
+  }
+  .flip-sign.is-free{background:var(--free-bg);}
+  .flip-sign.is-occupied{background:var(--occupied-bg);}
+  .flip-sign .status-label{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+  }
+  .flip-sign.is-free .status-label{color:var(--free);}
+  .flip-sign.is-occupied .status-label{color:var(--occupied);}
+  .flip-sign .status-detail{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+  .flip-sign .timer{
+    font-family:'JetBrains Mono',monospace;
+    font-weight:600;
+    font-size:20px;
+  }
+  .flip-sign.is-occupied .timer{color:var(--occupied);}
+  .flip-sign.is-free .timer{color:var(--free);}
+
+  .queue-row{
+    margin:0 18px 8px;
+    font-size:12.5px;
+    color:var(--wait);
+    background:var(--wait-bg);
+    border-radius:10px;
+    padding:8px 12px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .sign-actions{padding:0 18px 18px; display:flex; gap:10px;}
+
+  /* ---------- TOASTS ---------- */
+  #toast-wrap{
+    position:fixed;
+    top:14px;
+    left:50%;
+    transform:translateX(-50%);
+    width:calc(100% - 32px);
+    max-width:448px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    z-index:60;
+    pointer-events:none;
+  }
+  .toast{
+    background:var(--ink);
+    color:#fff;
+    padding:13px 16px;
+    border-radius:12px;
+    font-size:13.5px;
+    font-weight:500;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    animation: toast-in .28s ease;
+  }
+  .toast b{font-weight:700;}
+  .toast .dot{width:7px;height:7px;border-radius:50%; background:var(--free); flex-shrink:0;}
+  @keyframes toast-in{from{opacity:0; transform:translateY(-10px);} to{opacity:1; transform:translateY(0);}}
+
+  /* ---------- HISTORY ---------- */
+  .day-heading{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-soft); margin:6px 2px 0;}
+  .history-item{
+    background:var(--surface);
+    border-radius:14px;
+    padding:13px 15px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    box-shadow:var(--shadow);
+  }
+  .history-item .room-dot{width:10px;height:10px;border-radius:3px; flex-shrink:0;}
+  .room-dot.bathroom{background:#4E8FA8;}
+  .room-dot.toilet{background:#8A6FB0;}
+  .history-item .info{flex:1; min-width:0;}
+  .history-item .info .line1{font-size:14.5px; font-weight:600;}
+  .history-item .info .line2{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+  .history-item .dur{font-family:'JetBrains Mono',monospace; font-weight:600; font-size:14px; color:var(--ink);}
+  .empty-state{
+    text-align:center;
+    padding:48px 20px;
+    color:var(--ink-soft);
+  }
+  .empty-state .icon{width:44px;height:44px; margin:0 auto 12px; opacity:.5;}
+  .empty-state p{margin:0; font-size:14px;}
+
+  /* ---------- LEADERBOARD ---------- */
+  .lb-row{
+    background:var(--surface);
+    border-radius:14px;
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    box-shadow:var(--shadow);
+  }
+  .lb-rank{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    width:26px;
+    text-align:center;
+    color:var(--ink-soft);
+  }
+  .lb-row.rank-1 .lb-rank{color:#B9832A;}
+  .lb-row.rank-2 .lb-rank{color:#8A8F94;}
+  .lb-row.rank-3 .lb-rank{color:#A46A3C;}
+  .lb-name{flex:1; font-weight:600; font-size:14.5px;}
+  .lb-meta{font-size:11.5px; color:var(--ink-soft); margin-top:1px;}
+  .lb-time{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px;}
+  .lb-bar-track{height:5px; background:var(--surface-2); border-radius:4px; margin-top:8px; overflow:hidden;}
+  .lb-bar-fill{height:100%; background:var(--free); border-radius:4px; transition:width .4s ease;}
+
+  section-title{}
+  .section-title{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:14px 2px 0;}
+
+  /* ---------- BOTTOM NAV ---------- */
+  nav.bottom-nav{
+    position:fixed;
+    bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:480px;
+    background:var(--surface);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    gap:4px;
+    z-index:50;
+  }
+  .nav-btn{
+    flex:1;
+    background:none; border:none;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:7px 4px;
+    border-radius:12px;
+    color:var(--ink-soft);
+    font-size:11px;
+    font-weight:600;
+  }
+  .nav-btn.active{color:var(--ink); background:var(--surface-2);}
+  .nav-btn svg{width:22px;height:22px;}
+
+  /* misc */
+  .row{display:flex; align-items:center; justify-content:space-between;}
+  .muted{color:var(--ink-soft);}
+  .members-line{font-size:12px; color:var(--ink-soft); padding:2px 2px 0;}
+  a{color:inherit;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="toast-wrap"></div>
+
+  <!-- ============ LANDING ============ -->
+  <div id="screen-landing" class="center-screen">
+    <div class="brand">
+      <svg class="signature-icon" viewBox="0 0 64 64" fill="none">
+        <rect x="6" y="6" width="52" height="52" rx="14" fill="#2F7A5C"/>
+        <path d="M18 33.5 27 42 46 22" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1>Is it free?</h1>
+      <p>Track the bathroom &amp; toilet with your roommates.<br>No more knocking.</p>
+    </div>
+
+    <div id="landing-home" class="card stack">
+      <button class="btn btn-primary btn-block" id="btn-create-room">Create a room</button>
+      <div class="divider-word">or</div>
+      <button class="btn btn-outline btn-block" id="btn-show-join">Join with a code</button>
+    </div>
+
+    <div id="landing-join" class="card stack hidden">
+      <div class="field">
+        <label for="join-code-input">Room code</label>
+        <input id="join-code-input" maxlength="6" placeholder="e.g. K7QX2" autocomplete="off" autocapitalize="characters">
+      </div>
+      <div class="error-text" id="join-error"></div>
+      <button class="btn btn-primary btn-block" id="btn-join-submit">Join room</button>
+      <button class="btn btn-outline btn-block" id="btn-back-home">Back</button>
+    </div>
+  </div>
+
+  <!-- ============ NAME ENTRY ============ -->
+  <div id="screen-name" class="center-screen hidden">
+    <div class="brand">
+      <h1 id="name-heading">You're in</h1>
+      <p id="name-sub">Room code <span class="mono" id="name-room-code" style="font-weight:700;"></span> — what should we call you?</p>
+    </div>
+    <div class="card stack">
+      <div class="field">
+        <label for="name-input">Your name</label>
+        <input id="name-input" maxlength="20" placeholder="e.g. Sam" autocomplete="off">
+      </div>
+      <div class="error-text" id="name-error"></div>
+      <button class="btn btn-primary btn-block" id="btn-name-continue">Continue</button>
+    </div>
+  </div>
+
+  <!-- ============ MAIN APP ============ -->
+  <div id="screen-main" class="hidden" style="display:flex; flex-direction:column; flex:1;">
+    <div class="topbar">
+      <div class="who">
+        <span class="greet">Signed in as</span>
+        <span class="name" id="main-username">—</span>
+      </div>
+      <div class="code-chip">
+        <span id="main-room-code">——</span>
+        <button id="btn-copy-code" title="Copy code">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="members-line" id="members-line"></div>
+
+    <main>
+      <!-- HOME TAB -->
+      <div class="tab-panel active" id="tab-home">
+        <div class="rooms-grid" id="rooms-grid"></div>
+        <div class="section-title">Today so far</div>
+        <div class="stack" id="today-preview"></div>
+      </div>
+
+      <!-- HISTORY TAB -->
+      <div class="tab-panel" id="tab-history">
+        <div class="section-title" style="margin-top:6px;">History</div>
+        <div class="stack" id="history-list"></div>
+      </div>
+
+      <!-- LEADERBOARD TAB -->
+      <div class="tab-panel" id="tab-leaderboard">
+        <div class="section-title" style="margin-top:6px;">All-time leaderboard</div>
+        <p class="muted" style="font-size:12.5px; margin:0 2px;">Total time spent occupying a room. Glory and/or shame.</p>
+        <div class="stack" id="leaderboard-list"></div>
+      </div>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+        Home
+      </button>
+      <button class="nav-btn" data-tab="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+        History
+      </button>
+      <button class="nav-btn" data-tab="leaderboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a3 3 0 0 0 3 3"/><path d="M17 6h3a3 3 0 0 1-3 3"/></svg>
+        Leaders
+      </button>
+      <button class="nav-btn" id="btn-leave-room">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        Leave
+      </button>
+    </nav>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- storage helpers ---------------- */
+  async function sGet(key, shared){
+    try{
+      const r = await window.storage.get(key, !!shared);
+      return r ? r.value : null;
+    }catch(e){ return null; }
+  }
+  async function sSet(key, value, shared){
+    try{
+      return await window.storage.set(key, value, !!shared);
+    }catch(e){ console.error('storage set failed', key, e); return null; }
+  }
+  async function sGetJSON(key, shared, fallback){
+    const v = await sGet(key, shared);
+    if(v === null || v === undefined) return fallback;
+    try{ return JSON.parse(v); }catch(e){ return fallback; }
+  }
+  async function sSetJSON(key, obj, shared){
+    return await sSet(key, JSON.stringify(obj), shared);
+  }
+
+  const ROOM_KINDS = [
+    { id:'bathroom', label:'Bathroom', sub:'Shower / bath',
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M6 12V6a2 2 0 0 1 2-3l1 1"/><path d="M6 12v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7"/><path d="M9 21v1"/><path d="M15 21v1"/><circle cx="12" cy="4" r="0"/></svg>' },
+    { id:'toilet', label:'Toilet', sub:'WC',
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10"/><path d="M8 4v4"/><path d="M16 4v4"/><path d="M6 12h12l-1.2 7a2 2 0 0 1-2 1.7h-5.6a2 2 0 0 1-2-1.7L6 12Z"/><path d="M6 12a3 3 0 0 1 3-4h6a3 3 0 0 1 3 4"/></svg>' }
+  ];
+
+  const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no O/0, I/1
+  function genCode(len){
+    len = len || 5;
+    let s = "";
+    for(let i=0;i<len;i++) s += CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)];
+    return s;
+  }
+
+  function todayStr(d){
+    d = d || new Date();
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+String(d.getDate()).padStart(2,'0');
+  }
+  function fmtClock(ms){
+    const totalSec = Math.max(0, Math.floor(ms/1000));
+    const m = Math.floor(totalSec/60);
+    const s = totalSec%60;
+    return String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
+  }
+  function fmtDuration(mins){
+    mins = Math.round(mins);
+    if(mins < 1) return "<1m";
+    if(mins < 60) return mins+"m";
+    const h = Math.floor(mins/60), m = mins%60;
+    return h+"h"+(m? " "+m+"m":"");
+  }
+  function fmtTimeOfDay(ts){
+    const d = new Date(ts);
+    let h = d.getHours(), m = String(d.getMinutes()).padStart(2,'0');
+    const ap = h >= 12 ? 'PM':'AM';
+    h = h % 12; if(h===0) h = 12;
+    return h+":"+m+" "+ap;
+  }
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  /* ---------------- app state ---------------- */
+  let ME = null;            // {roomCode, name}
+  let roomState = null;     // {bathroom:{occupant,startTime,queue:[]}, toilet:{...}}
+  let prevRoomState = null; // for diffing to fire toasts
+  let history = [];         // array of session records
+  let members = [];         // array of names
+  let pollTimer = null;
+  let tickTimer = null;
+  let notifPermissionAsked = false;
+
+  function stateKey(code){ return "room:"+code+":state"; }
+  function historyKey(code){ return "room:"+code+":history"; }
+  function membersKey(code){ return "room:"+code+":members"; }
+  function infoKey(code){ return "room:"+code+":info"; }
+
+  function defaultState(){
+    return {
+      bathroom:{ occupant:null, startTime:null, queue:[] },
+      toilet:{ occupant:null, startTime:null, queue:[] }
+    };
+  }
+
+  /* ---------------- toasts ---------------- */
+  function showToast(html, opts){
+    opts = opts || {};
+    const wrap = document.getElementById('toast-wrap');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = '<span class="dot" style="background:'+(opts.color||'var(--free)')+'"></span><span>'+html+'</span>';
+    wrap.appendChild(el);
+    setTimeout(()=>{ el.style.transition='opacity .3s ease, transform .3s ease'; el.style.opacity='0'; el.style.transform='translateY(-8px)'; setTimeout(()=>el.remove(), 320); }, 4200);
+
+    if(notifPermissionAsked && window.Notification && Notification.permission === 'granted'){
+      try{
+        const plain = html.replace(/<[^>]+>/g,'');
+        new Notification('Is it free?', { body: plain });
+      }catch(e){}
+    }
+  }
+
+  function maybeAskNotifPermission(){
+    if(notifPermissionAsked) return;
+    notifPermissionAsked = true;
+    if(window.Notification && Notification.permission === 'default'){
+      Notification.requestPermission().catch(()=>{});
+    }
+  }
+
+  /* ---------------- screens ---------------- */
+  function show(id){
+    ['screen-landing','screen-name','screen-main'].forEach(s=>{
+      document.getElementById(s).classList.toggle('hidden', s!==id);
+    });
+  }
+
+  /* ---------------- landing / join / create ---------------- */
+  const landingHome = document.getElementById('landing-home');
+  const landingJoin = document.getElementById('landing-join');
+
+  document.getElementById('btn-show-join').onclick = ()=>{
+    landingHome.classList.add('hidden');
+    landingJoin.classList.remove('hidden');
+    document.getElementById('join-code-input').focus();
+  };
+  document.getElementById('btn-back-home').onclick = ()=>{
+    landingJoin.classList.add('hidden');
+    landingHome.classList.remove('hidden');
+    document.getElementById('join-error').textContent = '';
+  };
+
+  let pendingRoomCode = null;
+  let pendingIsNewRoom = false;
+
+  document.getElementById('btn-create-room').onclick = async ()=>{
+    const btn = document.getElementById('btn-create-room');
+    btn.disabled = true; btn.textContent = 'Creating…';
+    let code, tries = 0;
+    do{
+      code = genCode(5);
+      tries++;
+      const exists = await sGet(infoKey(code), true);
+      if(!exists) break;
+    }while(tries < 8);
+
+    await sSetJSON(infoKey(code), { code, createdAt: Date.now() }, true);
+    await sSetJSON(stateKey(code), defaultState(), true);
+    await sSetJSON(historyKey(code), [], true);
+    await sSetJSON(membersKey(code), [], true);
+
+    pendingRoomCode = code;
+    pendingIsNewRoom = true;
+    btn.disabled = false; btn.textContent = 'Create a room';
+    goToNameScreen();
+  };
+
+  document.getElementById('btn-join-submit').onclick = async ()=>{
+    const input = document.getElementById('join-code-input');
+    const errEl = document.getElementById('join-error');
+    const code = input.value.trim().toUpperCase();
+    errEl.textContent = '';
+    if(!code){ errEl.textContent = 'Enter a room code.'; return; }
+    const btn = document.getElementById('btn-join-submit');
+    btn.disabled = true; btn.textContent = 'Checking…';
+    const info = await sGet(infoKey(code), true);
+    btn.disabled = false; btn.textContent = 'Join room';
+    if(!info){ errEl.textContent = "Can't find a room with that code."; return; }
+    pendingRoomCode = code;
+    pendingIsNewRoom = false;
+    goToNameScreen();
+  };
+  document.getElementById('join-code-input').addEventListener('keydown', e=>{
+    if(e.key === 'Enter') document.getElementById('btn-join-submit').click();
+  });
+
+  function goToNameScreen(){
+    document.getElementById('name-room-code').textContent = pendingRoomCode;
+    document.getElementById('name-heading').textContent = pendingIsNewRoom ? "Room created" : "You're in";
+    show('screen-name');
+    document.getElementById('name-input').focus();
+  }
+
+  document.getElementById('btn-name-continue').onclick = submitName;
+  document.getElementById('name-input').addEventListener('keydown', e=>{
+    if(e.key === 'Enter') submitName();
+  });
+
+  async function submitName(){
+    const input = document.getElementById('name-input');
+    const errEl = document.getElementById('name-error');
+    const name = input.value.trim();
+    if(!name){ errEl.textContent = 'Enter your name.'; return; }
+    if(name.length > 20){ errEl.textContent = 'Keep it under 20 characters.'; return; }
+    errEl.textContent = '';
+
+    const code = pendingRoomCode;
+    let mem = await sGetJSON(membersKey(code), true, []);
+    if(!mem.includes(name)) mem.push(name);
+    await sSetJSON(membersKey(code), mem, true);
+
+    ME = { roomCode: code, name };
+    await sSetJSON('me', ME, false);
+
+    enterMainApp();
+  }
+
+  /* ---------------- main app boot ---------------- */
+  async function enterMainApp(){
+    document.getElementById('main-username').textContent = ME.name;
+    document.getElementById('main-room-code').textContent = ME.roomCode;
+    show('screen-main');
+    maybeAskNotifPermission();
+    await refreshAll(true);
+    startPolling();
+  }
+
+  document.getElementById('btn-copy-code').onclick = async ()=>{
+    try{
+      await navigator.clipboard.writeText(ME.roomCode);
+      showToast('Room code copied: <b>'+ME.roomCode+'</b>');
+    }catch(e){
+      showToast('Room code: <b>'+ME.roomCode+'</b>');
+    }
+  };
+
+  document.getElementById('btn-leave-room').onclick = async ()=>{
+    if(!confirm('Leave this room? You can rejoin anytime with the code.')) return;
+    stopPolling();
+    await sSetJSON('me', null, false);
+    ME = null; roomState = null; prevRoomState = null; history = []; members = [];
+    document.getElementById('name-input').value = '';
+    document.getElementById('join-code-input').value = '';
+    landingJoin.classList.add('hidden');
+    landingHome.classList.remove('hidden');
+    show('screen-landing');
+  };
+
+  /* ---------------- tabs ---------------- */
+  document.querySelectorAll('.nav-btn[data-tab]').forEach(btn=>{
+    btn.onclick = ()=>{
+      document.querySelectorAll('.nav-btn[data-tab]').forEach(b=>b.classList.toggle('active', b===btn));
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id === 'tab-'+tab));
+      if(tab === 'history') renderHistory();
+      if(tab === 'leaderboard') renderLeaderboard();
+    };
+  });
+
+  /* ---------------- polling ---------------- */
+  function startPolling(){
+    stopPolling();
+    pollTimer = setInterval(()=>refreshAll(false), 3500);
+    tickTimer = setInterval(tickTimers, 1000);
+  }
+  function stopPolling(){
+    if(pollTimer) clearInterval(pollTimer);
+    if(tickTimer) clearInterval(tickTimer);
+    pollTimer = null; tickTimer = null;
+  }
+
+  async function refreshAll(isInitial){
+    if(!ME) return;
+    const code = ME.roomCode;
+    const [newState, newHistory, newMembers] = await Promise.all([
+      sGetJSON(stateKey(code), true, defaultState()),
+      sGetJSON(historyKey(code), true, []),
+      sGetJSON(membersKey(code), true, [])
+    ]);
+
+    if(!isInitial && roomState){
+      diffAndNotify(roomState, newState);
+    }
+
+    prevRoomState = roomState;
+    roomState = newState;
+    history = newHistory;
+    members = newMembers;
+
+    renderMembers();
+    renderRooms();
+    const activeTab = document.querySelector('.nav-btn.active') ? document.querySelector('.nav-btn.active').dataset.tab : 'home';
+    if(activeTab === 'history') renderHistory();
+    if(activeTab === 'leaderboard') renderLeaderboard();
+    renderTodayPreview();
+  }
+
+  function diffAndNotify(oldSt, newSt){
+    ROOM_KINDS.forEach(rk=>{
+      const oldR = oldSt[rk.id] || {occupant:null,queue:[]};
+      const newR = newSt[rk.id] || {occupant:null,queue:[]};
+
+      // someone finished -> became free
+      if(oldR.occupant && !newR.occupant){
+        const durMin = oldR.startTime ? (Date.now() - oldR.startTime)/60000 : 0;
+        let msg = '<b>'+escapeHtml(oldR.occupant)+'</b> finished the '+rk.label.toLowerCase()+' ('+fmtDuration(durMin)+') — it&rsquo;s free now.';
+        const nextUp = oldR.queue && oldR.queue[0];
+        if(nextUp){
+          msg += ' <b>'+escapeHtml(nextUp)+'</b>, you&rsquo;re up!';
+        }
+        showToast(msg, { color:'var(--free)' });
+      }
+      // someone started -> became occupied
+      else if(!oldR.occupant && newR.occupant){
+        if(newR.occupant !== (ME && ME.name)){
+          showToast('<b>'+escapeHtml(newR.occupant)+'</b> just started using the '+rk.label.toLowerCase()+'.', { color:'var(--occupied)' });
+        }
+      }
+    });
+  }
+
+  function tickTimers(){
+    if(!roomState) return;
+    ROOM_KINDS.forEach(rk=>{
+      const r = roomState[rk.id];
+      const el = document.getElementById('timer-'+rk.id);
+      if(el && r && r.occupant && r.startTime){
+        el.textContent = fmtClock(Date.now() - r.startTime);
+      }
+    });
+  }
+
+  /* ---------------- rendering: members ---------------- */
+  function renderMembers(){
+    const el = document.getElementById('members-line');
+    if(!members || members.length === 0){ el.textContent = ''; return; }
+    el.textContent = members.length + (members.length===1 ? ' roommate: ' : ' roommates: ') + members.join(', ');
+  }
+
+  /* ---------------- rendering: room cards ---------------- */
+  function renderRooms(){
+    const grid = document.getElementById('rooms-grid');
+    grid.innerHTML = ROOM_KINDS.map(rk => roomCardHTML(rk)).join('');
+    // wire buttons after render
+    ROOM_KINDS.forEach(rk=>{
+      const startBtn = document.getElementById('btn-start-'+rk.id);
+      const finishBtn = document.getElementById('btn-finish-'+rk.id);
+      const queueBtn = document.getElementById('btn-queue-'+rk.id);
+      if(startBtn) startBtn.onclick = ()=>startSession(rk.id);
+      if(finishBtn) finishBtn.onclick = ()=>finishSession(rk.id);
+      if(queueBtn) queueBtn.onclick = ()=>toggleQueue(rk.id);
+    });
+    tickTimers();
+  }
+
+  function roomCardHTML(rk){
+    const r = (roomState && roomState[rk.id]) || {occupant:null,startTime:null,queue:[]};
+    const isFree = !r.occupant;
+    const isMe = r.occupant === (ME && ME.name);
+    const queue = r.queue || [];
+    const inQueue = queue.includes(ME && ME.name);
+
+    let statusLabel, statusDetail, timerHTML = '';
+    if(isFree){
+      statusLabel = 'Vacant';
+      statusDetail = 'Free to use';
+    }else{
+      statusLabel = 'Engaged';
+      statusDetail = (isMe ? 'You' : escapeHtml(r.occupant)) + ' • since ' + fmtTimeOfDay(r.startTime);
+      timerHTML = '<span class="timer" id="timer-'+rk.id+'">'+fmtClock(Date.now()-r.startTime)+'</span>';
+    }
+
+    let queueRow = '';
+    if(queue.length > 0){
+      queueRow = '<div class="queue-row">⏳ Waiting: '+queue.map(escapeHtml).join(', ')+'</div>';
+    }
+
+    let actions = '';
+    if(isFree){
+      actions = '<button class="btn btn-primary btn-block" id="btn-start-'+rk.id+'">Start using it</button>';
+    }else if(isMe){
+      actions = '<button class="btn btn-primary btn-block" id="btn-finish-'+rk.id+'" style="background:var(--occupied);">Finish</button>';
+    }else{
+      actions = '<button class="btn btn-outline btn-block" id="btn-queue-'+rk.id+'">'+
+        (inQueue ? 'Cancel wait' : 'Notify me when free') +'</button>';
+    }
+
+    return (
+      '<div class="sign-card">'+
+        '<div class="sign-plate">'+
+          '<span class="icon">'+rk.icon+'</span>'+
+          '<div><div class="room-name">'+rk.label+'</div><div class="room-sub">'+rk.sub+'</div></div>'+
+        '</div>'+
+        '<div class="flip-sign '+(isFree?'is-free':'is-occupied')+'">'+
+          '<div><div class="status-label">'+statusLabel+'</div><div class="status-detail">'+statusDetail+'</div></div>'+
+          timerHTML+
+        '</div>'+
+        queueRow+
+        '<div class="sign-actions">'+actions+'</div>'+
+      '</div>'
+    );
+  }
+
+  async function startSession(roomId){
+    const code = ME.roomCode;
+    // re-fetch freshest state to avoid clobbering a concurrent start
+    const fresh = await sGetJSON(stateKey(code), true, defaultState());
+    if(fresh[roomId].occupant){
+      showToast('Someone just beat you to it.', {color:'var(--occupied)'});
+      roomState = fresh; renderRooms();
+      return;
+    }
+    fresh[roomId].occupant = ME.name;
+    fresh[roomId].startTime = Date.now();
+    // remove self from that room's queue if present
+    fresh[roomId].queue = (fresh[roomId].queue||[]).filter(n => n !== ME.name);
+    await sSetJSON(stateKey(code), fresh, true);
+    roomState = fresh;
+    renderRooms();
+  }
+
+  async function finishSession(roomId){
+    const code = ME.roomCode;
+    const fresh = await sGetJSON(stateKey(code), true, defaultState());
+    const r = fresh[roomId];
+    if(!r.occupant || r.occupant !== ME.name){
+      roomState = fresh; renderRooms();
+      return;
+    }
+    const durMin = (Date.now() - r.startTime) / 60000;
+
+    // append to history
+    const h = await sGetJSON(historyKey(code), true, []);
+    h.unshift({
+      id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
+      room: roomId,
+      name: ME.name,
+      start: r.startTime,
+      end: Date.now(),
+      durationMin: durMin,
+      date: todayStr()
+    });
+    const trimmed = h.slice(0, 300);
+    await sSetJSON(historyKey(code), trimmed, true);
+    history = trimmed;
+
+    fresh[roomId].occupant = null;
+    fresh[roomId].startTime = null;
+    await sSetJSON(stateKey(code), fresh, true);
+    roomState = fresh;
+
+    showToast('Nice — you used the '+roomLabel(roomId).toLowerCase()+' for '+fmtDuration(durMin)+'.', {color:'var(--free)'});
+    renderRooms();
+    renderTodayPreview();
+  }
+
+  async function toggleQueue(roomId){
+    const code = ME.roomCode;
+    const fresh = await sGetJSON(stateKey(code), true, defaultState());
+    const q = fresh[roomId].queue || [];
+    const idx = q.indexOf(ME.name);
+    if(idx === -1){
+      q.push(ME.name);
+      showToast("We'll notify you when the "+roomLabel(roomId).toLowerCase()+' is free.', {color:'var(--wait)'});
+    }else{
+      q.splice(idx,1);
+    }
+    fresh[roomId].queue = q;
+    await sSetJSON(stateKey(code), fresh, true);
+    roomState = fresh;
+    renderRooms();
+  }
+
+  function roomLabel(id){
+    const rk = ROOM_KINDS.find(r=>r.id===id);
+    return rk ? rk.label : id;
+  }
+
+  /* ---------------- today preview (home tab) ---------------- */
+  function renderTodayPreview(){
+    const el = document.getElementById('today-preview');
+    const today = todayStr();
+    const items = (history||[]).filter(h => h.date === today).slice(0, 5);
+    if(items.length === 0){
+      el.innerHTML = emptyStateHTML('Nothing logged yet today.');
+      return;
+    }
+    el.innerHTML = items.map(historyItemHTML).join('');
+  }
+
+  /* ---------------- history tab ---------------- */
+  function renderHistory(){
+    const el = document.getElementById('history-list');
+    if(!history || history.length === 0){
+      el.innerHTML = emptyStateHTML('No sessions logged yet.');
+      return;
+    }
+    // group by date
+    const groups = {};
+    history.forEach(h=>{
+      groups[h.date] = groups[h.date] || [];
+      groups[h.date].push(h);
+    });
+    const dates = Object.keys(groups).sort((a,b)=> a<b?1:-1);
+    const today = todayStr();
+    let html = '';
+    dates.forEach(date=>{
+      const label = date === today ? 'Today' : date;
+      html += '<div class="day-heading">'+label+'</div>';
+      html += groups[date].map(historyItemHTML).join('');
+    });
+    el.innerHTML = html;
+  }
+
+  function historyItemHTML(h){
+    return (
+      '<div class="history-item">'+
+        '<span class="room-dot '+h.room+'"></span>'+
+        '<div class="info">'+
+          '<div class="line1">'+escapeHtml(h.name)+' · '+roomLabel(h.room)+'</div>'+
+          '<div class="line2">'+fmtTimeOfDay(h.start)+' – '+fmtTimeOfDay(h.end)+'</div>'+
+        '</div>'+
+        '<div class="dur">'+fmtDuration(h.durationMin)+'</div>'+
+      '</div>'
+    );
+  }
+
+  /* ---------------- leaderboard tab ---------------- */
+  function renderLeaderboard(){
+    const el = document.getElementById('leaderboard-list');
+    if(!history || history.length === 0){
+      el.innerHTML = emptyStateHTML('No data yet — finish a session to get on the board.');
+      return;
+    }
+    const totals = {}; // name -> {mins, sessions}
+    history.forEach(h=>{
+      totals[h.name] = totals[h.name] || {mins:0, sessions:0};
+      totals[h.name].mins += h.durationMin;
+      totals[h.name].sessions += 1;
+    });
+    const rows = Object.keys(totals).map(name=>({name, ...totals[name]}));
+    rows.sort((a,b)=> b.mins - a.mins);
+    const maxMins = rows[0] ? rows[0].mins : 1;
+    const medals = ['🥇','🥈','🥉'];
+
+    el.innerHTML = rows.map((row, i)=>{
+      const pct = Math.max(4, Math.round((row.mins / maxMins) * 100));
+      return (
+        '<div class="lb-row rank-'+(i+1)+'">'+
+          '<div class="lb-rank">'+(medals[i] || (i+1))+'</div>'+
+          '<div style="flex:1;">'+
+            '<div class="row"><span class="lb-name">'+escapeHtml(row.name)+'</span><span class="lb-time">'+fmtDuration(row.mins)+'</span></div>'+
+            '<div class="lb-meta">'+row.sessions+' session'+(row.sessions===1?'':'s')+'</div>'+
+            '<div class="lb-bar-track"><div class="lb-bar-fill" style="width:'+pct+'%;"></div></div>'+
+          '</div>'+
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function emptyStateHTML(msg){
+    return (
+      '<div class="empty-state">'+
+        '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M8 15c1 1 2.2 1.5 4 1.5s3-.5 4-1.5"/></svg>'+
+        '<p>'+msg+'</p>'+
+      '</div>'
+    );
+  }
+
+  /* ---------------- boot ---------------- */
+  async function boot(){
+    const saved = await sGetJSON('me', false, null);
+    if(saved && saved.roomCode && saved.name){
+      const info = await sGet(infoKey(saved.roomCode), true);
+      if(info){
+        ME = saved;
+        // ensure still listed as a member
+        let mem = await sGetJSON(membersKey(ME.roomCode), true, []);
+        if(!mem.includes(ME.name)){ mem.push(ME.name); await sSetJSON(membersKey(ME.roomCode), mem, true); }
+        await enterMainApp();
+        return;
+      }
+    }
+    show('screen-landing');
+  }
+
+  boot();
+
+})();
+</script>
+</body>
+</html>
