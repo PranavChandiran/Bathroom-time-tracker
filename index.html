@@ -450,7 +450,9 @@
 <script>
 (function(){
   "use strict";
-
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
   /* ================================================================
      FIREBASE SETUP — REQUIRED
      1. Go to https://console.firebase.google.com -> Add project (free).
@@ -468,14 +470,14 @@
      read/write that room's data (fine for a household, not for anything
      sensitive).
      ================================================================ */
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyDINasY6wA6UIeNCAhg3INQeAsWbbtRZ6E",
+  authDomain: "bathroom-time-97c4e.firebaseapp.com",
+  projectId: "bathroom-time-97c4e",
+  storageBucket: "bathroom-time-97c4e.firebasestorage.app",
+  messagingSenderId: "332772084950",
+  appId: "1:332772084950:web:8e0031089f5e65f4fd4d77"
+};
 
   let db = null;
   let roomsCol = null;
